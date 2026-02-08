@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Crow + C++</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+
+  <body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-6 rounded-xl shadow-lg w-96">
+      <h1 class="text-2xl font-bold mb-4">Crow + C++</h1>
+
+      <input
+        id="txt"
+        class="w-full border rounded px-3 py-2 mb-3"
+        placeholder="Type something..."
+        />
+
+        <button
+        onclick="send()"
+        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+        >
+        Send to C++
+        </button>
+
+        <pre
+        id="out"
+        class="mt-4 text-sm text-gray-800 whitespace-pre-wrap"
+        ></pre>
+
+    </div>
+
+    <script>
+        async function send() {
+            const text = document.getElementById("txt").value;
+
+            const r = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+            });
+
+            const data = await r.json();
+            document.getElementById("out").innerText =
+            JSON.stringify(data, null, 2);
+        }
+    </script>
+
+  </body>
+</html>
