@@ -7,28 +7,200 @@
   </head>
 
   <body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-6 rounded-xl shadow-lg w-96">
-      <h1 class="text-2xl font-bold mb-4">Crow + C++</h1>
+    <div class="bg-white p-6 rounded-xl shadow-lg w-[28rem]">
+  <h1 class="text-2xl font-bold mb-4">Crow + C++</h1>
 
-      <input
-        id="txt"
+  <!-- Status -->
+  <div id="status" class="mb-4 text-sm"></div>
+
+  <!-- Auth box -->
+    <div class="border rounded-lg p-4 mb-6">
+        <h2 class="text-lg font-semibold mb-3">Account</h2>
+
+        <label class="block text-sm font-medium mb-1">Username</label>
+        <input id="user" class="w-full border rounded px-3 py-2 mb-3" placeholder="kushal" />
+
+        <label class="block text-sm font-medium mb-1">Password</label>
+        <input id="pass" type="password" class="w-full border rounded px-3 py-2 mb-4" placeholder="password123" />
+
+        <div class="flex gap-2">
+        <button onclick="register()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition">
+            Register
+        </button>
+        <button onclick="login()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+            Login
+        </button>
+        <button onclick="logout()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition ml-auto">
+            Logout
+        </button>
+        </div>
+    </div>
+
+    <!-- Reverse numbers -->
+    <div class="border rounded-lg p-4">
+        <h2 class="text-lg font-semibold mb-3">Reverse numbers</h2>
+
+        <input
+        id="nums"
         class="w-full border rounded px-3 py-2 mb-3"
-        placeholder="Type something..."
+        placeholder="Enter numbers like: 1 2 3 4 5"
         />
 
         <button
-        onclick="send()"
-        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
+        onclick="reverseNums()"
+        class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
         >
-        Send to C++
+        Reverse (requires login)
         </button>
 
-        <pre
-        id="out"
-        class="mt-4 text-sm text-gray-800 whitespace-pre-wrap"
-        ></pre>
-
+        <div id="revOut" class="mt-4 text-gray-800"></div>
     </div>
+
+    <!-- Othello -->
+    <div class="border rounded-lg p-4 mt-6">
+        <h2 class="text-lg font-semibold mb-3">Othello</h2>
+
+        <button
+        onclick="runGame()"
+        class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
+        >
+        Run Game
+        </button>
+
+        <div id="gameOut" class="mt-3 text-sm text-gray-700"></div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById("status");
+
+        function setStatus(msg, ok = true) {
+            statusEl.className = "mb-4 text-sm " + (ok ? "text-green-700" : "text-red-700");
+            statusEl.innerText = msg;
+        }
+
+        async function api(path, options = {}) {
+            const r = await fetch(path, {
+                ...options,
+                headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+            });
+
+            const text = await r.text();
+            let data = null;
+            try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+
+            return { ok: r.ok, status: r.status, text, data };
+        }
+
+        async function refreshMe() {
+            const r = await fetch("/api/me");
+            const text = await r.text();
+            try {
+                const j = JSON.parse(text);
+                if (r.ok && j.username) setStatus(`Logged in as ${j.username}`);
+                else setStatus("Not logged in", false);
+            } catch {
+                setStatus(r.ok ? "OK" : text || "Not logged in", r.ok);
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById("user").value.trim();
+            const password = document.getElementById("pass").value;
+
+            const res = await api("/api/register", {
+                method: "POST",
+                body: JSON.stringify({ username, password }),
+            });
+
+            if (res.ok) {
+                setStatus("Registered! Now login.");
+            } else {
+                setStatus(res.data?.message || res.text || `Register failed (${res.status})`, false);
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById("user").value.trim();
+            const password = document.getElementById("pass").value;
+
+            const res = await api("/api/login", {
+                method: "POST",
+                body: JSON.stringify({ username, password }),
+            });
+
+            if (res.ok) {
+                setStatus("Logged in!");
+                await refreshMe();
+            } else {
+                setStatus(res.text || `Login failed (${res.status})`, false);
+            }
+        }
+
+        async function logout() {
+            const res = await api("/api/logout", { method: "POST", body: "{}" });
+            if (res.ok) setStatus("Logged out.");
+            else setStatus(res.text || `Logout failed (${res.status})`, false);
+            await refreshMe();
+        }
+
+        function parseNumbers(s) {
+            return s.trim().split(/[\s,]+/).filter(Boolean).map(Number);
+        }
+
+        async function reverseNums() {
+            const raw = document.getElementById("nums").value;
+            const numbers = parseNumbers(raw);
+            const out = document.getElementById("revOut");
+
+            if (numbers.length === 0 || numbers.some(n => Number.isNaN(n))) {
+                out.innerHTML = `<p class="text-red-600">Enter valid numbers (ex: 1 2 3 4 5)</p>`;
+                return;
+            }
+
+            const res = await api("/api/reverse", {
+                method: "POST",
+                body: JSON.stringify({ numbers }),
+            });
+
+            if (!res.ok) {
+                out.innerHTML = `<p class="text-red-600">${res.text || "Not authorized"}</p>`;
+                return;
+            }
+
+            const { original, reversed } = res.data;
+
+            out.innerHTML = `
+                <div class="border rounded-lg p-3 bg-gray-50">
+                <p class="font-semibold mb-1">Original</p>
+                <p class="mb-3 text-sm text-gray-700">
+                    ${original.join(" <span class='text-gray-400'>→</span> ")}
+                </p>
+
+                <p class="font-semibold mb-1">Reversed</p>
+                <p class="text-sm text-gray-700">
+                    ${reversed.join(" <span class='text-gray-400'>→</span> ")}
+                </p>
+                </div>
+            `;
+        }
+
+        async function runGame() {
+            const out = document.getElementById("gameOut");
+            out.textContent = "Starting game...";
+
+            const res = await api("/api/run-game", { method: "POST", body: "{}" });
+
+            if (res.ok) {
+                out.textContent = res.data?.message || "Game started.";
+            } else {
+                out.textContent = res.text || `Failed to start game (${res.status})`;
+            }
+        }
+
+        // On load, show login status
+        refreshMe();
+    </script>
+</div>
 
     <script>
         async function send() {
@@ -43,6 +215,15 @@
             const data = await r.json();
             document.getElementById("out").innerText =
             JSON.stringify(data, null, 2);
+        }
+
+        function parseNumbers(s) {
+            // supports "1 2 3", "1,2,3", "1, 2, 3"
+            return s
+            .trim()
+            .split(/[\s,]+/)
+            .filter(Boolean)
+            .map(Number);
         }
     </script>
 
