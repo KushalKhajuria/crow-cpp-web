@@ -16,4 +16,5 @@ public:
     bool flipRecur(int row, int col, int vert, int hori, int side);
     bool emptySpace(int row, int col);
     const vector<vector<int>>& getBoard() const;
+    void setBoard(const vector<vector<int>>& next);
 };

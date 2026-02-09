@@ -62,3 +62,7 @@ bool Board::emptySpace(int row, int col) {
 const vector<vector<int>>& Board::getBoard() const {
     return board;
 }
+
+void Board::setBoard(const vector<vector<int>>& next) {
+    board = next;
+}
