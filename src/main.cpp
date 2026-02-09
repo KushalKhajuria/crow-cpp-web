@@ -29,6 +29,7 @@ std::mutex submissions_mtx;
 
 int main() {
     crow::SimpleApp app;
+    Othello game;
 
     sqlite3* db = nullptr;
     if (sqlite3_open("app.db", &db) != SQLITE_OK) {
@@ -204,12 +205,55 @@ int main() {
     });
 
     CROW_ROUTE(app, "/api/run-game").methods(crow::HTTPMethod::Post)
-    ([]{
-        Othello::runGame();
+    ([&]{
+        game.runGame();
         crow::json::wvalue out;
         out["ok"] = true;
         out["message"] = "Game started.";
         return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/othello/state").methods(crow::HTTPMethod::Get)
+    ([&]{
+        const auto& board = game.getBoard().getBoard();
+        crow::json::wvalue out;
+        out["ok"] = true;
+        out["turn"] = game.getCurrentSide();
+        out["board"] = crow::json::wvalue::list();
+        for (size_t r = 0; r < board.size(); r++) {
+            out["board"][r] = crow::json::wvalue::list();
+            for (size_t c = 0; c < board[r].size(); c++) {
+                out["board"][r][c] = board[r][c];
+            }
+        }
+        return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/othello/move").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto body = crow::json::load(req.body);
+        if (!body || !body.has("row") || !body.has("col")) {
+            return crow::response(400, "Expected JSON: {\"row\":0,\"col\":0}");
+        }
+
+        int row = body["row"].i();
+        int col = body["col"].i();
+
+        bool ok = game.placePiece(row, col);
+        const auto& board = game.getBoard().getBoard();
+
+        crow::json::wvalue out;
+        out["ok"] = ok;
+        out["turn"] = game.getCurrentSide();
+        out["board"] = crow::json::wvalue::list();
+        for (size_t r = 0; r < board.size(); r++) {
+            out["board"][r] = crow::json::wvalue::list();
+            for (size_t c = 0; c < board[r].size(); c++) {
+                out["board"][r][c] = board[r][c];
+            }
+        }
+
+        return crow::response(ok ? 200 : 400, out);
     });
 
     app.port(18080).run();
