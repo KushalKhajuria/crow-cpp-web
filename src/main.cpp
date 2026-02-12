@@ -94,6 +94,8 @@ int main() {
         " player1 TEXT NOT NULL,"
         " player2 TEXT NOT NULL,"
         " turn INTEGER NOT NULL,"
+        " pass_count INTEGER NOT NULL DEFAULT 0,"
+        " draw_offer_by TEXT,"
         " board TEXT NOT NULL,"
         " status TEXT NOT NULL,"
         " created_at INTEGER NOT NULL,"
@@ -103,6 +105,8 @@ int main() {
         std::cerr << "Failed to create games table\n";
         return 1;
     }
+    exec_sql(db, "ALTER TABLE games ADD COLUMN pass_count INTEGER NOT NULL DEFAULT 0;");
+    exec_sql(db, "ALTER TABLE games ADD COLUMN draw_offer_by TEXT;");
 
     CROW_ROUTE(app, "/")([]{
         std::ifstream f("public/index.html"); // <-- assumes you run ./app from project root
@@ -307,18 +311,20 @@ int main() {
 
         sqlite3_stmt* ins = nullptr;
         const char* ins_sql =
-            "INSERT INTO games(player1, player2, turn, board, status, created_at, updated_at)"
-            " VALUES(?,?,?,?,?,?,?);";
+            "INSERT INTO games(player1, player2, turn, pass_count, draw_offer_by, board, status, created_at, updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?);";
         if (sqlite3_prepare_v2(db, ins_sql, -1, &ins, nullptr) != SQLITE_OK) {
             return crow::response(500, "DB error");
         }
         sqlite3_bind_text(ins, 1, user->c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(ins, 2, opponent.c_str(), -1, SQLITE_TRANSIENT);
         sqlite3_bind_int(ins, 3, 1);
-        sqlite3_bind_text(ins, 4, board_json.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_text(ins, 5, "active", -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int64(ins, 6, (sqlite3_int64)now);
-        sqlite3_bind_int64(ins, 7, (sqlite3_int64)now);
+        sqlite3_bind_int(ins, 4, 0);
+        sqlite3_bind_null(ins, 5);
+        sqlite3_bind_text(ins, 6, board_json.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(ins, 7, "active", -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(ins, 8, (sqlite3_int64)now);
+        sqlite3_bind_int64(ins, 9, (sqlite3_int64)now);
         rc = sqlite3_step(ins);
         sqlite3_finalize(ins);
         if (rc != SQLITE_DONE) return crow::response(500, "DB error");
@@ -330,9 +336,10 @@ int main() {
     });
 
     CROW_ROUTE(app, "/api/games/<int>/state").methods(crow::HTTPMethod::Get)
-    ([&](int game_id){
+    ([&](const crow::request& req, int game_id){
+        auto viewer = require_user(db, req.get_header_value("Cookie"));
         sqlite3_stmt* stmt = nullptr;
-        const char* sql = "SELECT player1, player2, turn, board, status FROM games WHERE id=?;";
+        const char* sql = "SELECT player1, player2, turn, pass_count, draw_offer_by, board, status FROM games WHERE id=?;";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
             return crow::response(500, "DB error");
         }
@@ -343,11 +350,52 @@ int main() {
         std::string p1 = (const char*)sqlite3_column_text(stmt, 0);
         std::string p2 = (const char*)sqlite3_column_text(stmt, 1);
         int turn = sqlite3_column_int(stmt, 2);
-        std::string board_json = (const char*)sqlite3_column_text(stmt, 3);
-        std::string status = (const char*)sqlite3_column_text(stmt, 4);
+        int pass_count = sqlite3_column_int(stmt, 3);
+        const unsigned char* draw_raw = sqlite3_column_text(stmt, 4);
+        std::string draw_offer_by = draw_raw ? (const char*)draw_raw : "";
+        std::string board_json = (const char*)sqlite3_column_text(stmt, 5);
+        std::string status = (const char*)sqlite3_column_text(stmt, 6);
         sqlite3_finalize(stmt);
 
         auto board = board_from_json(board_json);
+
+        // Auto-pass if current player has no moves.
+        bool did_pass = false;
+        if (status == "active") {
+            bool can_autopass = false;
+            if (viewer && (*viewer == p1 || *viewer == p2)) {
+                int viewer_side = (*viewer == p1) ? 1 : -1;
+                if (viewer_side == turn) can_autopass = true;
+            }
+            if (can_autopass) {
+                Board game_board;
+                game_board.setBoard(board);
+                if (!game_board.anyMoves(turn)) {
+                int next_turn = (turn == 1) ? -1 : 1;
+                int next_pass = pass_count + 1;
+                const char* next_status = (next_pass >= 2) ? "finished" : "active";
+
+                sqlite3_stmt* upd = nullptr;
+                const char* upd_sql =
+                    "UPDATE games SET turn=?, pass_count=?, draw_offer_by=NULL, status=?, updated_at=? WHERE id=?;";
+                if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) == SQLITE_OK) {
+                    sqlite3_bind_int(upd, 1, next_turn);
+                    sqlite3_bind_int(upd, 2, next_pass);
+                    sqlite3_bind_text(upd, 3, next_status, -1, SQLITE_TRANSIENT);
+                    sqlite3_bind_int64(upd, 4, (sqlite3_int64)std::time(nullptr));
+                    sqlite3_bind_int(upd, 5, game_id);
+                    sqlite3_step(upd);
+                    sqlite3_finalize(upd);
+                }
+
+                turn = next_turn;
+                pass_count = next_pass;
+                status = next_status;
+                draw_offer_by.clear();
+                did_pass = true;
+            }
+            }
+        }
 
         crow::json::wvalue out;
         out["ok"] = true;
@@ -356,6 +404,9 @@ int main() {
         out["player2"] = p2;
         out["turn"] = turn;
         out["status"] = status;
+        out["pass_count"] = pass_count;
+        out["draw_offer_by"] = draw_offer_by;
+        if (did_pass) out["message"] = "No valid moves. Turn passed.";
         out["board"] = crow::json::wvalue::list();
         for (size_t r = 0; r < board.size(); r++) {
             out["board"][r] = crow::json::wvalue::list();
@@ -363,6 +414,32 @@ int main() {
                 out["board"][r][c] = board[r][c];
             }
         }
+        return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/games/active").methods(crow::HTTPMethod::Get)
+    ([&](const crow::request& req){
+        auto user = require_user(db, req.get_header_value("Cookie"));
+        if (!user) return crow::response(401, "Login required");
+
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql =
+            "SELECT id FROM games WHERE status='active' AND (player1=? OR player2=?) "
+            "ORDER BY updated_at DESC LIMIT 1;";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_text(stmt, 1, user->c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, user->c_str(), -1, SQLITE_TRANSIENT);
+        int rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW) { sqlite3_finalize(stmt); return crow::response(404, "No active game"); }
+
+        int game_id = sqlite3_column_int(stmt, 0);
+        sqlite3_finalize(stmt);
+
+        crow::json::wvalue out;
+        out["ok"] = true;
+        out["game_id"] = game_id;
         return crow::response(out);
     });
 
@@ -379,7 +456,7 @@ int main() {
         int col = body["col"].i();
 
         sqlite3_stmt* stmt = nullptr;
-        const char* sql = "SELECT player1, player2, turn, board, status FROM games WHERE id=?;";
+        const char* sql = "SELECT player1, player2, turn, pass_count, draw_offer_by, board, status FROM games WHERE id=?;";
         if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
             return crow::response(500, "DB error");
         }
@@ -390,11 +467,16 @@ int main() {
         std::string p1 = (const char*)sqlite3_column_text(stmt, 0);
         std::string p2 = (const char*)sqlite3_column_text(stmt, 1);
         int turn = sqlite3_column_int(stmt, 2);
-        std::string board_json = (const char*)sqlite3_column_text(stmt, 3);
-        std::string status = (const char*)sqlite3_column_text(stmt, 4);
+        int pass_count = sqlite3_column_int(stmt, 3);
+        const unsigned char* draw_raw = sqlite3_column_text(stmt, 4);
+        std::string draw_offer_by = draw_raw ? (const char*)draw_raw : "";
+        std::string board_json = (const char*)sqlite3_column_text(stmt, 5);
+        std::string status = (const char*)sqlite3_column_text(stmt, 6);
         sqlite3_finalize(stmt);
 
         if (status != "active") return crow::response(400, "Game not active");
+
+        std::time_t now = std::time(nullptr);
 
         int side = 0;
         if (*user == p1) side = 1;
@@ -411,6 +493,43 @@ int main() {
 
         Board game_board;
         game_board.setBoard(board);
+
+        if (!game_board.anyMoves(side)) {
+            int next_turn = (side == 1) ? -1 : 1;
+            int next_pass = pass_count + 1;
+            const char* next_status = (next_pass >= 2) ? "finished" : "active";
+
+            sqlite3_stmt* upd = nullptr;
+            const char* upd_sql = "UPDATE games SET turn=?, pass_count=?, draw_offer_by=NULL, status=?, updated_at=? WHERE id=?;";
+            if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) != SQLITE_OK) {
+                return crow::response(500, "DB error");
+            }
+            sqlite3_bind_int(upd, 1, next_turn);
+            sqlite3_bind_int(upd, 2, next_pass);
+            sqlite3_bind_text(upd, 3, next_status, -1, SQLITE_TRANSIENT);
+            sqlite3_bind_int64(upd, 4, (sqlite3_int64)now);
+            sqlite3_bind_int(upd, 5, game_id);
+            sqlite3_step(upd);
+            sqlite3_finalize(upd);
+
+            crow::json::wvalue out;
+            out["ok"] = true;
+            out["game_id"] = game_id;
+            out["turn"] = next_turn;
+            out["pass_count"] = next_pass;
+            out["status"] = next_status;
+            out["draw_offer_by"] = "";
+            out["message"] = "No valid moves. Turn passed.";
+            out["board"] = crow::json::wvalue::list();
+            for (size_t r = 0; r < board.size(); r++) {
+                out["board"][r] = crow::json::wvalue::list();
+                for (size_t c = 0; c < board[r].size(); c++) {
+                    out["board"][r][c] = board[r][c];
+                }
+            }
+            return crow::response(out);
+        }
+
         bool ok = game_board.addPiece(row, col, side);
         if (!ok) return crow::response(400, "Invalid move");
 
@@ -418,17 +537,20 @@ int main() {
         int next_turn = (side == 1) ? -1 : 1;
 
         std::string new_json = board_to_json(board);
-        std::time_t now = std::time(nullptr);
 
         sqlite3_stmt* upd = nullptr;
-        const char* upd_sql = "UPDATE games SET turn=?, board=?, updated_at=? WHERE id=?;";
+        const char* upd_sql = "UPDATE games SET turn=?, pass_count=?, draw_offer_by=NULL, board=?, status=?, updated_at=? WHERE id=?;";
         if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) != SQLITE_OK) {
             return crow::response(500, "DB error");
         }
+        int next_pass = 0;
+        const char* next_status = (next_pass >= 2) ? "finished" : "active";
         sqlite3_bind_int(upd, 1, next_turn);
-        sqlite3_bind_text(upd, 2, new_json.c_str(), -1, SQLITE_TRANSIENT);
-        sqlite3_bind_int64(upd, 3, (sqlite3_int64)now);
-        sqlite3_bind_int(upd, 4, game_id);
+        sqlite3_bind_int(upd, 2, next_pass);
+        sqlite3_bind_text(upd, 3, new_json.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(upd, 4, next_status, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(upd, 5, (sqlite3_int64)now);
+        sqlite3_bind_int(upd, 6, game_id);
         sqlite3_step(upd);
         sqlite3_finalize(upd);
 
@@ -436,6 +558,9 @@ int main() {
         out["ok"] = true;
         out["game_id"] = game_id;
         out["turn"] = next_turn;
+        out["pass_count"] = next_pass;
+        out["status"] = next_status;
+        out["draw_offer_by"] = "";
         out["board"] = crow::json::wvalue::list();
         for (size_t r = 0; r < board.size(); r++) {
             out["board"][r] = crow::json::wvalue::list();
@@ -443,6 +568,129 @@ int main() {
                 out["board"][r][c] = board[r][c];
             }
         }
+        return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/games/<int>/resign").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req, int game_id){
+        auto user = require_user(db, req.get_header_value("Cookie"));
+        if (!user) return crow::response(401, "Login required");
+
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "SELECT player1, player2, status FROM games WHERE id=?;";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_int(stmt, 1, game_id);
+        int rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW) { sqlite3_finalize(stmt); return crow::response(404, "Game not found"); }
+
+        std::string p1 = (const char*)sqlite3_column_text(stmt, 0);
+        std::string p2 = (const char*)sqlite3_column_text(stmt, 1);
+        std::string status = (const char*)sqlite3_column_text(stmt, 2);
+        sqlite3_finalize(stmt);
+
+        if (status != "active") return crow::response(400, "Game not active");
+        if (*user != p1 && *user != p2) return crow::response(403, "Not a player in this game");
+
+        std::string winner = (*user == p1) ? p2 : p1;
+
+        sqlite3_stmt* upd = nullptr;
+        const char* upd_sql = "UPDATE games SET status='resigned', draw_offer_by=NULL, updated_at=? WHERE id=?;";
+        if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_int64(upd, 1, (sqlite3_int64)std::time(nullptr));
+        sqlite3_bind_int(upd, 2, game_id);
+        sqlite3_step(upd);
+        sqlite3_finalize(upd);
+
+        crow::json::wvalue out;
+        out["ok"] = true;
+        out["status"] = "resigned";
+        out["winner"] = winner;
+        return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/games/<int>/offer-draw").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req, int game_id){
+        auto user = require_user(db, req.get_header_value("Cookie"));
+        if (!user) return crow::response(401, "Login required");
+
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "SELECT player1, player2, status FROM games WHERE id=?;";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_int(stmt, 1, game_id);
+        int rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW) { sqlite3_finalize(stmt); return crow::response(404, "Game not found"); }
+
+        std::string p1 = (const char*)sqlite3_column_text(stmt, 0);
+        std::string p2 = (const char*)sqlite3_column_text(stmt, 1);
+        std::string status = (const char*)sqlite3_column_text(stmt, 2);
+        sqlite3_finalize(stmt);
+
+        if (status != "active") return crow::response(400, "Game not active");
+        if (*user != p1 && *user != p2) return crow::response(403, "Not a player in this game");
+
+        sqlite3_stmt* upd = nullptr;
+        const char* upd_sql = "UPDATE games SET draw_offer_by=?, updated_at=? WHERE id=?;";
+        if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_text(upd, 1, user->c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int64(upd, 2, (sqlite3_int64)std::time(nullptr));
+        sqlite3_bind_int(upd, 3, game_id);
+        sqlite3_step(upd);
+        sqlite3_finalize(upd);
+
+        crow::json::wvalue out;
+        out["ok"] = true;
+        out["status"] = "active";
+        out["draw_offer_by"] = *user;
+        return crow::response(out);
+    });
+
+    CROW_ROUTE(app, "/api/games/<int>/accept-draw").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req, int game_id){
+        auto user = require_user(db, req.get_header_value("Cookie"));
+        if (!user) return crow::response(401, "Login required");
+
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "SELECT player1, player2, status, draw_offer_by FROM games WHERE id=?;";
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_int(stmt, 1, game_id);
+        int rc = sqlite3_step(stmt);
+        if (rc != SQLITE_ROW) { sqlite3_finalize(stmt); return crow::response(404, "Game not found"); }
+
+        std::string p1 = (const char*)sqlite3_column_text(stmt, 0);
+        std::string p2 = (const char*)sqlite3_column_text(stmt, 1);
+        std::string status = (const char*)sqlite3_column_text(stmt, 2);
+        const unsigned char* draw_raw = sqlite3_column_text(stmt, 3);
+        std::string draw_offer_by = draw_raw ? (const char*)draw_raw : "";
+        sqlite3_finalize(stmt);
+
+        if (status != "active") return crow::response(400, "Game not active");
+        if (*user != p1 && *user != p2) return crow::response(403, "Not a player in this game");
+        if (draw_offer_by.empty()) return crow::response(409, "No draw offer");
+        if (draw_offer_by == *user) return crow::response(409, "You cannot accept your own offer");
+
+        sqlite3_stmt* upd = nullptr;
+        const char* upd_sql = "UPDATE games SET status='draw', draw_offer_by=NULL, updated_at=? WHERE id=?;";
+        if (sqlite3_prepare_v2(db, upd_sql, -1, &upd, nullptr) != SQLITE_OK) {
+            return crow::response(500, "DB error");
+        }
+        sqlite3_bind_int64(upd, 1, (sqlite3_int64)std::time(nullptr));
+        sqlite3_bind_int(upd, 2, game_id);
+        sqlite3_step(upd);
+        sqlite3_finalize(upd);
+
+        crow::json::wvalue out;
+        out["ok"] = true;
+        out["status"] = "draw";
         return crow::response(out);
     });
 

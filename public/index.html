@@ -69,6 +69,24 @@
         >
         Run Game
         </button>
+        <button
+        onclick="resignGame()"
+        class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition ml-2"
+        >
+        Resign
+        </button>
+        <button
+        onclick="offerDraw()"
+        class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 transition ml-2"
+        >
+        Offer Draw
+        </button>
+        <button
+        onclick="acceptDraw()"
+        class="bg-slate-700 text-white px-4 py-2 rounded hover:bg-slate-800 transition ml-2"
+        >
+        Accept Draw
+        </button>
 
         <div id="gameOut" class="mt-3 text-sm text-gray-700"></div>
         <div id="boardWrap" class="mt-4 hidden">
@@ -205,7 +223,18 @@
                 meta.textContent = "";
                 return;
             }
-            meta.textContent = `Game #${state.game_id} — ${state.player1} vs ${state.player2} — Turn: ${state.turn}`;
+            const offer = state.draw_offer_by ? ` — Draw offered by ${state.draw_offer_by}` : "";
+            meta.textContent = `Game #${state.game_id} — ${state.player1} vs ${state.player2} — Turn: ${state.turn}${offer}`;
+        }
+
+        function endGameUi(message) {
+            const wrap = document.getElementById("boardWrap");
+            const out = document.getElementById("gameOut");
+            if (pollId) clearInterval(pollId);
+            pollId = null;
+            gameId = null;
+            wrap.classList.add("hidden");
+            out.textContent = message || "Game finished. Start a new game.";
         }
 
         function startPolling() {
@@ -248,6 +277,14 @@
             if (!gameId) return;
             const res = await api(`/api/games/${gameId}/state`, { method: "GET" });
             if (!res.ok) return;
+            if (res.data?.status && res.data.status !== "active") {
+                endGameUi("Game finished. Start a new game.");
+                return;
+            }
+            if (res.data?.message) {
+                const out = document.getElementById("gameOut");
+                out.textContent = res.data.message;
+            }
             setGameMeta(res.data);
             renderBoard(boardEl, res.data?.board || []);
         }
@@ -264,11 +301,45 @@
             });
 
             if (res.ok) {
+                if (res.data?.status && res.data.status !== "active") {
+                    endGameUi("Game finished. Start a new game.");
+                    return;
+                }
+                if (res.data?.message) {
+                    const out = document.getElementById("gameOut");
+                    out.textContent = res.data.message;
+                }
                 setGameMeta(res.data);
                 renderBoard(boardEl, res.data?.board || []);
             } else {
                 // Keep showing the last board, but still show the click coords.
                 if (res.data?.board) renderBoard(boardEl, res.data.board);
+            }
+        }
+
+        async function resignGame() {
+            if (!gameId) return;
+            const res = await api(`/api/games/${gameId}/resign`, { method: "POST", body: "{}" });
+            if (res.ok) {
+                endGameUi(`Resigned. Winner: ${res.data?.winner || "opponent"}.`);
+            }
+        }
+
+        async function offerDraw() {
+            if (!gameId) return;
+            const res = await api(`/api/games/${gameId}/offer-draw`, { method: "POST", body: "{}" });
+            if (res.ok) {
+                const out = document.getElementById("gameOut");
+                out.textContent = "Draw offered.";
+                await refreshBoard(document.getElementById("board"));
+            }
+        }
+
+        async function acceptDraw() {
+            if (!gameId) return;
+            const res = await api(`/api/games/${gameId}/accept-draw`, { method: "POST", body: "{}" });
+            if (res.ok) {
+                endGameUi("Draw accepted. Game ended.");
             }
         }
 
@@ -305,15 +376,23 @@
 
         // On load, show login status
         refreshMe();
-        const gameParam = new URLSearchParams(window.location.search).get("game");
-        if (gameParam) {
-            gameId = Number(gameParam);
-            const wrap = document.getElementById("boardWrap");
-            const boardEl = document.getElementById("board");
-            wrap.classList.remove("hidden");
-            refreshBoard(boardEl);
-            startPolling();
-        }
+        (async () => {
+            const gameParam = new URLSearchParams(window.location.search).get("game");
+            if (gameParam) {
+                gameId = Number(gameParam);
+            } else {
+                const res = await api("/api/games/active", { method: "GET" });
+                if (res.ok) gameId = res.data?.game_id || null;
+            }
+
+            if (gameId) {
+                const wrap = document.getElementById("boardWrap");
+                const boardEl = document.getElementById("board");
+                wrap.classList.remove("hidden");
+                refreshBoard(boardEl);
+                startPolling();
+            }
+        })();
     </script>
 </div>
 

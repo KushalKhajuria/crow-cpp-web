@@ -10,11 +10,10 @@ Board::Board() : board(8, vector<int>(8, 0)) {
 }
 
 bool Board::addPiece(int row, int col, int side) {
-    if (validatePlacement(row, col)) {
+    if (validatePlacement(row, col) && flipVectors(row, col, side, true)) {
         board[row][col] = side;
-        flipVectors(row, col, side);
         return true;
-    } 
+    }
     return false;
 }
 
@@ -24,30 +23,33 @@ bool Board::validatePlacement(int row, int col) {
     return true;
 }
 
-void Board::flipVectors(int row, int col, int side) {
-    flipVector(row, col, -1, -1, side);
-    flipVector(row, col, -1, 0, side);
-    flipVector(row, col, -1, 1, side);
+bool Board::flipVectors(int row, int col, int side, bool flip) {
+    bool flipped = false;
+    if (flipVector(row, col, -1, -1, side, flip)) flipped = true;
+    if (flipVector(row, col, -1, 0, side, flip)) flipped = true;
+    if (flipVector(row, col, -1, 1, side, flip)) flipped = true;
 
-    flipVector(row, col, 0, -1, side);
-    flipVector(row, col, 0, 1, side);
+    if (flipVector(row, col, 0, -1, side, flip)) flipped = true;
+    if (flipVector(row, col, 0, 1, side, flip)) flipped = true;
 
-    flipVector(row, col, 1, -1, side);
-    flipVector(row, col, 1, 0, side);
-    flipVector(row, col, 1, 1, side);
+    if (flipVector(row, col, 1, -1, side, flip)) flipped = true;
+    if (flipVector(row, col, 1, 0, side, flip)) flipped = true;
+    if (flipVector(row, col, 1, 1, side, flip)) flipped = true;
+    return flipped;
 }
 
-void Board::flipVector(int row, int col, int vert, int hori, int side) {
-    flipRecur(row + vert, col + hori, vert, hori, side);
+bool Board::flipVector(int row, int col, int vert, int hori, int side, bool flip) {
+    if (!emptySpace(row+vert,col+hori) && board[row+vert][col+hori] == side) return false;
+    return flipRecur(row + vert, col + hori, vert, hori, side, flip);
 }
 
 // recursive
-bool Board::flipRecur(int row, int col, int vert, int hori, int side) {
+bool Board::flipRecur(int row, int col, int vert, int hori, int side, bool flip) {
     if (emptySpace(row, col)) return false;
     if (board[row][col] == side) return true;
 
-    if (flipRecur(row + vert, col + hori, vert, hori, side)) {
-        board[row][col] *= -1;
+    if (flipRecur(row + vert, col + hori, vert, hori, side, flip)) {
+        if (flip) board[row][col] *= -1;
         return true;
     }
     return false;
@@ -65,4 +67,13 @@ const vector<vector<int>>& Board::getBoard() const {
 
 void Board::setBoard(const vector<vector<int>>& next) {
     board = next;
+}
+
+bool Board::anyMoves(int side) {
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            if (board[i][j] == 0 && flipVectors(i, j, side, false)) return true;
+        }
+    }
+    return false;
 }
