@@ -18,4 +18,5 @@ public:
     const vector<vector<int>>& getBoard() const;
     void setBoard(const vector<vector<int>>& next);
     bool anyMoves(int side);
+    int calcWinner();
 };

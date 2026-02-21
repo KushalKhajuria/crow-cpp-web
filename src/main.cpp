@@ -74,6 +74,16 @@ static std::vector<std::vector<int>> board_from_json(const std::string& s) {
     return out;
 }
 
+static void add_winner_to_response(crow::json::wvalue& out, const std::vector<std::vector<int>>& board, const std::string& p1, const std::string& p2) {
+    Board game_board;
+    game_board.setBoard(board);
+    int winner_side = game_board.calcWinner();
+    out["winner_side"] = winner_side;
+    if (winner_side == 1) out["winner"] = p1;
+    else if (winner_side == -1) out["winner"] = p2;
+    else out["winner"] = "draw";
+}
+
 int main() {
     crow::SimpleApp app;
 
@@ -407,6 +417,9 @@ int main() {
         out["pass_count"] = pass_count;
         out["draw_offer_by"] = draw_offer_by;
         if (did_pass) out["message"] = "No valid moves. Turn passed.";
+        if (status == "finished") {
+            add_winner_to_response(out, board, p1, p2);
+        }
         out["board"] = crow::json::wvalue::list();
         for (size_t r = 0; r < board.size(); r++) {
             out["board"][r] = crow::json::wvalue::list();
@@ -520,6 +533,9 @@ int main() {
             out["status"] = next_status;
             out["draw_offer_by"] = "";
             out["message"] = "No valid moves. Turn passed.";
+            if (std::string(next_status) == "finished") {
+                add_winner_to_response(out, board, p1, p2);
+            }
             out["board"] = crow::json::wvalue::list();
             for (size_t r = 0; r < board.size(); r++) {
                 out["board"][r] = crow::json::wvalue::list();

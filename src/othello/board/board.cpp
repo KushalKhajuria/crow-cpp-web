@@ -77,3 +77,19 @@ bool Board::anyMoves(int side) {
     }
     return false;
 }
+
+int Board::calcWinner() {
+    int firstNum = 0;
+    int secondNum = 0;
+
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++) {
+            if (board[i][j] == -1) firstNum++;
+            else if (board[i][j] == 1) secondNum++;
+        }
+    }
+
+    if (firstNum > secondNum) return -1;
+    else if (secondNum > firstNum) return 1;
+    return 0;
+}

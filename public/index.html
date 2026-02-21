@@ -2,424 +2,427 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Crow + C++</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Online Othello</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-1: #f2f8ed;
+        --bg-2: #d2ead8;
+        --board-dark: #14532d;
+        --board-mid: #15803d;
+        --panel: #ffffff;
+        --ink: #0f172a;
+      }
+
+      body {
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--ink);
+        background: radial-gradient(circle at 10% 10%, var(--bg-1), var(--bg-2));
+      }
+    </style>
   </head>
 
-  <body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-6 rounded-xl shadow-lg w-[28rem]">
-  <h1 class="text-2xl font-bold mb-4">Crow + C++</h1>
+  <body class="min-h-screen p-4 md:p-8">
+    <main class="mx-auto max-w-7xl space-y-6">
+      <header class="rounded-2xl border border-emerald-200/80 bg-white/90 p-5 shadow-sm backdrop-blur">
+        <h1 class="text-3xl font-bold tracking-tight">Online Othello</h1>
+        <p class="text-sm text-slate-600">Crow + C++ backend with a Figma-inspired lobby and game board.</p>
+        <div id="status" class="mt-3 text-sm"></div>
+      </header>
 
-  <!-- Status -->
-  <div id="status" class="mb-4 text-sm"></div>
+      <section class="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+        <div class="space-y-6">
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="mb-3 text-lg font-semibold">Account</h2>
+            <div class="grid gap-3">
+              <label class="text-sm font-medium">Username</label>
+              <input id="user" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="kushal" />
 
-  <!-- Auth box -->
-    <div class="border rounded-lg p-4 mb-6">
-        <h2 class="text-lg font-semibold mb-3">Account</h2>
+              <label class="text-sm font-medium">Password</label>
+              <input id="pass" type="password" class="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="password123" />
 
-        <label class="block text-sm font-medium mb-1">Username</label>
-        <input id="user" class="w-full border rounded px-3 py-2 mb-3" placeholder="kushal" />
+              <div class="mt-1 flex flex-wrap gap-2">
+                <button onclick="register()" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-black">Register</button>
+                <button onclick="login()" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">Login</button>
+                <button onclick="logout()" class="ml-auto rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Logout</button>
+              </div>
+            </div>
+          </div>
 
-        <label class="block text-sm font-medium mb-1">Password</label>
-        <input id="pass" type="password" class="w-full border rounded px-3 py-2 mb-4" placeholder="password123" />
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="mb-3 text-lg font-semibold">Game Lobby</h2>
+            <label class="text-sm font-medium">Opponent username</label>
+            <input id="opponent" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="friend_username" />
 
-        <div class="flex gap-2">
-        <button onclick="register()" class="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 transition">
-            Register
-        </button>
-        <button onclick="login()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-            Login
-        </button>
-        <button onclick="logout()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition ml-auto">
-            Logout
-        </button>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button onclick="runGame()" class="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800">Create Game</button>
+              <button onclick="resignGame()" class="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Resign</button>
+              <button onclick="offerDraw()" class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">Offer Draw</button>
+              <button id="acceptDrawBtn" onclick="acceptDraw()" class="hidden rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">Accept Draw</button>
+            </div>
+
+            <div id="gameOut" class="mt-3 text-sm text-slate-700"></div>
+            <div id="gameMeta" class="mt-2 text-xs text-slate-500"></div>
+          </div>
         </div>
-    </div>
 
-    <!-- Reverse numbers -->
-    <div class="border rounded-lg p-4">
-        <h2 class="text-lg font-semibold mb-3">Reverse numbers</h2>
+        <div id="boardWrap" class="hidden rounded-2xl border border-emerald-800/30 bg-white p-5 shadow-sm">
+          <div class="mb-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Black</p>
+              <p id="blackScore" class="text-2xl font-bold">2</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p class="text-xs uppercase tracking-wide text-slate-500">White</p>
+              <p id="whiteScore" class="text-2xl font-bold">2</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p class="text-xs uppercase tracking-wide text-slate-500">Turn</p>
+              <p id="currentTurn" class="text-lg font-semibold">Black</p>
+            </div>
+          </div>
 
-        <input
-        id="nums"
-        class="w-full border rounded px-3 py-2 mb-3"
-        placeholder="Enter numbers like: 1 2 3 4 5"
-        />
+          <div class="inline-block rounded-xl bg-[var(--board-dark)] p-3 shadow-inner">
+            <div id="board" class="grid grid-cols-8 gap-0 overflow-hidden rounded-md border-2 border-emerald-950 bg-[var(--board-mid)]"></div>
+          </div>
 
-        <button
-        onclick="reverseNums()"
-        class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition"
-        >
-        Reverse (requires login)
-        </button>
-
-        <div id="revOut" class="mt-4 text-gray-800"></div>
-    </div>
-
-    <!-- Othello -->
-    <div class="border rounded-lg p-4 mt-6">
-        <h2 class="text-lg font-semibold mb-3">Othello</h2>
-
-        <label class="block text-sm font-medium mb-1">Opponent username</label>
-        <input id="opponent" class="w-full border rounded px-3 py-2 mb-3" placeholder="friend_username" />
-
-        <button
-        onclick="runGame()"
-        class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition"
-        >
-        Run Game
-        </button>
-        <button
-        onclick="resignGame()"
-        class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition ml-2"
-        >
-        Resign
-        </button>
-        <button
-        onclick="offerDraw()"
-        class="bg-amber-600 text-white px-4 py-2 rounded hover:bg-amber-700 transition ml-2"
-        >
-        Offer Draw
-        </button>
-        <button
-        onclick="acceptDraw()"
-        class="bg-slate-700 text-white px-4 py-2 rounded hover:bg-slate-800 transition ml-2"
-        >
-        Accept Draw
-        </button>
-
-        <div id="gameOut" class="mt-3 text-sm text-gray-700"></div>
-        <div id="boardWrap" class="mt-4 hidden">
-            <div id="gameMeta" class="mb-2 text-xs text-gray-600"></div>
-            <div
-            id="board"
-            class="grid grid-cols-8 gap-2 p-2 bg-emerald-700 rounded-lg shadow-inner"
-            ></div>
-            <div id="boardPos" class="mt-2 text-sm text-gray-700"></div>
-            <div class="mt-2 text-xs text-gray-500">Board updates via polling.</div>
+          <div id="boardPos" class="mt-3 text-sm text-slate-600"></div>
+          <p class="mt-2 text-xs text-slate-500">Board updates via polling.</p>
         </div>
-    </div>
+      </section>
+    </main>
 
     <script>
-        const statusEl = document.getElementById("status");
+      const statusEl = document.getElementById("status");
 
-        function setStatus(msg, ok = true) {
-            statusEl.className = "mb-4 text-sm " + (ok ? "text-green-700" : "text-red-700");
-            statusEl.innerText = msg;
+      function setStatus(msg, ok = true) {
+        statusEl.className = "mt-3 text-sm " + (ok ? "text-emerald-700" : "text-rose-700");
+        statusEl.innerText = msg;
+      }
+
+      async function api(path, options = {}) {
+        const r = await fetch(path, {
+          ...options,
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        });
+
+        const text = await r.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          // ignore
         }
 
-        async function api(path, options = {}) {
-            const r = await fetch(path, {
-                ...options,
-                headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-            });
+        return { ok: r.ok, status: r.status, text, data };
+      }
 
-            const text = await r.text();
-            let data = null;
-            try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+      let currentUser = null;
 
-            return { ok: r.ok, status: r.status, text, data };
+      async function refreshMe() {
+        const r = await fetch("/api/me");
+        const text = await r.text();
+        try {
+          const j = JSON.parse(text);
+          if (r.ok && j.username) {
+            currentUser = j.username;
+            setStatus(`Logged in as ${j.username}`);
+          } else {
+            currentUser = null;
+            setStatus("Not logged in", false);
+          }
+        } catch {
+          currentUser = null;
+          setStatus(r.ok ? "OK" : text || "Not logged in", r.ok);
+        }
+      }
+
+      async function register() {
+        const username = document.getElementById("user").value.trim();
+        const password = document.getElementById("pass").value;
+
+        const res = await api("/api/register", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (res.ok) {
+          setStatus("Registered! Now login.");
+        } else {
+          setStatus(res.data?.message || res.text || `Register failed (${res.status})`, false);
+        }
+      }
+
+      async function login() {
+        const username = document.getElementById("user").value.trim();
+        const password = document.getElementById("pass").value;
+
+        const res = await api("/api/login", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (res.ok) {
+          setStatus("Logged in!");
+          await refreshMe();
+        } else {
+          setStatus(res.text || `Login failed (${res.status})`, false);
+        }
+      }
+
+      async function logout() {
+        const res = await api("/api/logout", { method: "POST", body: "{}" });
+        if (res.ok) setStatus("Logged out.");
+        else setStatus(res.text || `Logout failed (${res.status})`, false);
+        currentUser = null;
+        await refreshMe();
+      }
+
+      let gameId = null;
+      let pollId = null;
+
+      function sideLabel(side) {
+        if (side === 1) return "Black";
+        if (side === -1) return "White";
+        return "-";
+      }
+
+      function updateBoardStats(board, turn) {
+        const blackEl = document.getElementById("blackScore");
+        const whiteEl = document.getElementById("whiteScore");
+        const turnEl = document.getElementById("currentTurn");
+
+        let black = 0;
+        let white = 0;
+        for (let r = 0; r < board.length; r++) {
+          for (let c = 0; c < board[r].length; c++) {
+            if (board[r][c] === 1) black++;
+            else if (board[r][c] === -1) white++;
+          }
         }
 
-        async function refreshMe() {
-            const r = await fetch("/api/me");
-            const text = await r.text();
-            try {
-                const j = JSON.parse(text);
-                if (r.ok && j.username) setStatus(`Logged in as ${j.username}`);
-                else setStatus("Not logged in", false);
-            } catch {
-                setStatus(r.ok ? "OK" : text || "Not logged in", r.ok);
-            }
+        blackEl.textContent = String(black);
+        whiteEl.textContent = String(white);
+        turnEl.textContent = sideLabel(turn);
+      }
+
+      function setGameMeta(state) {
+        const meta = document.getElementById("gameMeta");
+        if (!state) {
+          meta.textContent = "";
+          return;
         }
+        const offer = state.draw_offer_by ? ` - Draw offered by ${state.draw_offer_by}` : "";
+        meta.textContent = `Game #${state.game_id} - ${state.player1} vs ${state.player2} - Turn: ${sideLabel(state.turn)}${offer}`;
+      }
 
-        async function register() {
-            const username = document.getElementById("user").value.trim();
-            const password = document.getElementById("pass").value;
+      function endGameUi(message) {
+        const wrap = document.getElementById("boardWrap");
+        const out = document.getElementById("gameOut");
+        const acceptBtn = document.getElementById("acceptDrawBtn");
+        if (pollId) clearInterval(pollId);
+        pollId = null;
+        gameId = null;
+        acceptBtn.classList.add("hidden");
+        wrap.classList.add("hidden");
+        out.textContent = message || "Game finished. Start a new game.";
+      }
 
-            const res = await api("/api/register", {
-                method: "POST",
-                body: JSON.stringify({ username, password }),
-            });
+      function updateDrawButtons(state) {
+        const acceptBtn = document.getElementById("acceptDrawBtn");
+        const canAccept =
+          !!state &&
+          !!state.draw_offer_by &&
+          !!currentUser &&
+          state.draw_offer_by !== currentUser &&
+          state.status === "active";
+        acceptBtn.classList.toggle("hidden", !canAccept);
+      }
 
-            if (res.ok) {
-                setStatus("Registered! Now login.");
-            } else {
-                setStatus(res.data?.message || res.text || `Register failed (${res.status})`, false);
-            }
+      function gameEndMessage(state) {
+        if (!state || !state.status || state.status === "active") {
+          return "Game finished. Start a new game.";
         }
-
-        async function login() {
-            const username = document.getElementById("user").value.trim();
-            const password = document.getElementById("pass").value;
-
-            const res = await api("/api/login", {
-                method: "POST",
-                body: JSON.stringify({ username, password }),
-            });
-
-            if (res.ok) {
-                setStatus("Logged in!");
-                await refreshMe();
-            } else {
-                setStatus(res.text || `Login failed (${res.status})`, false);
-            }
+        if (state.status === "finished") {
+          if (state.winner === "draw" || state.winner_side === 0) return "Game over. It's a draw.";
+          if (state.winner) return `Game over. Winner: ${state.winner}.`;
+          return "Game over.";
         }
+        if (state.status === "draw") return "Draw accepted. Game ended.";
+        if (state.status === "resigned") return state.winner ? `Resigned. Winner: ${state.winner}.` : "Game ended by resignation.";
+        return `Game ended (${state.status}).`;
+      }
 
-        async function logout() {
-            const res = await api("/api/logout", { method: "POST", body: "{}" });
-            if (res.ok) setStatus("Logged out.");
-            else setStatus(res.text || `Logout failed (${res.status})`, false);
-            await refreshMe();
+      function startPolling() {
+        if (pollId) clearInterval(pollId);
+        pollId = setInterval(async () => {
+          const boardEl = document.getElementById("board");
+          await refreshBoard(boardEl);
+        }, 1500);
+      }
+
+      async function runGame() {
+        const out = document.getElementById("gameOut");
+        const wrap = document.getElementById("boardWrap");
+        const boardEl = document.getElementById("board");
+        const opponent = document.getElementById("opponent").value.trim();
+        out.textContent = "Starting game...";
+
+        const res = await api("/api/games/create", {
+          method: "POST",
+          body: JSON.stringify({ opponent }),
+        });
+
+        if (res.ok) {
+          gameId = res.data?.game_id;
+          out.textContent = gameId ? `Game created (#${gameId}).` : "Game created.";
+          if (gameId) {
+            const url = new URL(window.location.href);
+            url.searchParams.set("game", String(gameId));
+            window.history.replaceState({}, "", url.toString());
+          }
+          await refreshBoard(boardEl);
+          wrap.classList.remove("hidden");
+          startPolling();
+        } else {
+          out.textContent = res.text || `Failed to start game (${res.status})`;
         }
+      }
 
-        function parseNumbers(s) {
-            return s.trim().split(/[\s,]+/).filter(Boolean).map(Number);
+      async function refreshBoard(boardEl) {
+        if (!gameId) return;
+        const res = await api(`/api/games/${gameId}/state`, { method: "GET" });
+        if (!res.ok) return;
+        if (res.data?.status && res.data.status !== "active") {
+          endGameUi(gameEndMessage(res.data));
+          return;
         }
-
-        async function reverseNums() {
-            const raw = document.getElementById("nums").value;
-            const numbers = parseNumbers(raw);
-            const out = document.getElementById("revOut");
-
-            if (numbers.length === 0 || numbers.some(n => Number.isNaN(n))) {
-                out.innerHTML = `<p class="text-red-600">Enter valid numbers (ex: 1 2 3 4 5)</p>`;
-                return;
-            }
-
-            const res = await api("/api/reverse", {
-                method: "POST",
-                body: JSON.stringify({ numbers }),
-            });
-
-            if (!res.ok) {
-                out.innerHTML = `<p class="text-red-600">${res.text || "Not authorized"}</p>`;
-                return;
-            }
-
-            const { original, reversed } = res.data;
-
-            out.innerHTML = `
-                <div class="border rounded-lg p-3 bg-gray-50">
-                <p class="font-semibold mb-1">Original</p>
-                <p class="mb-3 text-sm text-gray-700">
-                    ${original.join(" <span class='text-gray-400'>→</span> ")}
-                </p>
-
-                <p class="font-semibold mb-1">Reversed</p>
-                <p class="text-sm text-gray-700">
-                    ${reversed.join(" <span class='text-gray-400'>→</span> ")}
-                </p>
-                </div>
-            `;
+        if (res.data?.message) {
+          const out = document.getElementById("gameOut");
+          out.textContent = res.data.message;
         }
+        setGameMeta(res.data);
+        updateDrawButtons(res.data);
+        renderBoard(boardEl, res.data?.board || []);
+        updateBoardStats(res.data?.board || [], res.data?.turn);
+      }
 
-        let gameId = null;
-        let pollId = null;
+      async function makeMove(row, col) {
+        const boardEl = document.getElementById("board");
+        const pos = document.getElementById("boardPos");
+        pos.textContent = `Row: ${row}, Col: ${col}`;
 
-        function setGameMeta(state) {
-            const meta = document.getElementById("gameMeta");
-            if (!state) {
-                meta.textContent = "";
-                return;
-            }
-            const offer = state.draw_offer_by ? ` — Draw offered by ${state.draw_offer_by}` : "";
-            meta.textContent = `Game #${state.game_id} — ${state.player1} vs ${state.player2} — Turn: ${state.turn}${offer}`;
-        }
+        if (!gameId) return;
+        const res = await api(`/api/games/${gameId}/move`, {
+          method: "POST",
+          body: JSON.stringify({ row, col }),
+        });
 
-        function endGameUi(message) {
-            const wrap = document.getElementById("boardWrap");
+        if (res.ok) {
+          if (res.data?.status && res.data.status !== "active") {
+            endGameUi(gameEndMessage(res.data));
+            return;
+          }
+          if (res.data?.message) {
             const out = document.getElementById("gameOut");
-            if (pollId) clearInterval(pollId);
-            pollId = null;
-            gameId = null;
-            wrap.classList.add("hidden");
-            out.textContent = message || "Game finished. Start a new game.";
+            out.textContent = res.data.message;
+          }
+          setGameMeta(res.data);
+          updateDrawButtons(res.data);
+          renderBoard(boardEl, res.data?.board || []);
+          updateBoardStats(res.data?.board || [], res.data?.turn);
+        } else {
+          if (res.data?.board) {
+            renderBoard(boardEl, res.data.board);
+            updateBoardStats(res.data.board, res.data?.turn);
+          }
         }
+      }
 
-        function startPolling() {
-            if (pollId) clearInterval(pollId);
-            pollId = setInterval(async () => {
-                const boardEl = document.getElementById("board");
-                await refreshBoard(boardEl);
-            }, 1500);
+      async function resignGame() {
+        if (!gameId) return;
+        const res = await api(`/api/games/${gameId}/resign`, { method: "POST", body: "{}" });
+        if (res.ok) {
+          endGameUi(`Resigned. Winner: ${res.data?.winner || "opponent"}.`);
         }
+      }
 
-        async function runGame() {
-            const out = document.getElementById("gameOut");
-            const wrap = document.getElementById("boardWrap");
-            const boardEl = document.getElementById("board");
-            const opponent = document.getElementById("opponent").value.trim();
-            out.textContent = "Starting game...";
+      async function offerDraw() {
+        if (!gameId) return;
+        const res = await api(`/api/games/${gameId}/offer-draw`, { method: "POST", body: "{}" });
+        if (res.ok) {
+          const out = document.getElementById("gameOut");
+          out.textContent = "Draw offered.";
+          await refreshBoard(document.getElementById("board"));
+        }
+      }
 
-            const res = await api("/api/games/create", {
-                method: "POST",
-                body: JSON.stringify({ opponent }),
+      async function acceptDraw() {
+        if (!gameId) return;
+        const res = await api(`/api/games/${gameId}/accept-draw`, { method: "POST", body: "{}" });
+        if (res.ok) {
+          endGameUi("Draw accepted. Game ended.");
+        }
+      }
+
+      function renderBoard(boardEl, board) {
+        const size = board.length || 8;
+        boardEl.innerHTML = "";
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            const cell = document.createElement("button");
+            cell.type = "button";
+            cell.dataset.row = String(r);
+            cell.dataset.col = String(c);
+            cell.className =
+              "h-10 w-10 border border-emerald-900 bg-emerald-700 transition hover:bg-emerald-600 sm:h-12 sm:w-12" +
+              " flex items-center justify-center";
+
+            const v = board[r]?.[c] ?? 0;
+            if (v !== 0) {
+              const disc = document.createElement("div");
+              disc.className =
+                "h-7 w-7 rounded-full shadow-inner sm:h-9 sm:w-9 " +
+                (v === 1
+                  ? "border-2 border-slate-700 bg-gradient-to-br from-slate-600 to-slate-900"
+                  : "border-2 border-slate-300 bg-gradient-to-br from-white to-slate-200");
+              cell.appendChild(disc);
+            }
+
+            cell.addEventListener("click", () => {
+              makeMove(r, c);
             });
 
-            if (res.ok) {
-                gameId = res.data?.game_id;
-                out.textContent = gameId ? `Game created (#${gameId}).` : "Game created.";
-                if (gameId) {
-                    const url = new URL(window.location.href);
-                    url.searchParams.set("game", String(gameId));
-                    window.history.replaceState({}, "", url.toString());
-                }
-                await refreshBoard(boardEl);
-                wrap.classList.remove("hidden");
-                startPolling();
-            } else {
-                out.textContent = res.text || `Failed to start game (${res.status})`;
-            }
+            boardEl.appendChild(cell);
+          }
+        }
+      }
+
+      refreshMe();
+      (async () => {
+        const gameParam = new URLSearchParams(window.location.search).get("game");
+        if (gameParam) {
+          gameId = Number(gameParam);
+        } else {
+          const res = await api("/api/games/active", { method: "GET" });
+          if (res.ok) gameId = res.data?.game_id || null;
         }
 
-        async function refreshBoard(boardEl) {
-            if (!gameId) return;
-            const res = await api(`/api/games/${gameId}/state`, { method: "GET" });
-            if (!res.ok) return;
-            if (res.data?.status && res.data.status !== "active") {
-                endGameUi("Game finished. Start a new game.");
-                return;
-            }
-            if (res.data?.message) {
-                const out = document.getElementById("gameOut");
-                out.textContent = res.data.message;
-            }
-            setGameMeta(res.data);
-            renderBoard(boardEl, res.data?.board || []);
+        if (gameId) {
+          const wrap = document.getElementById("boardWrap");
+          const boardEl = document.getElementById("board");
+          wrap.classList.remove("hidden");
+          refreshBoard(boardEl);
+          startPolling();
         }
-
-        async function makeMove(row, col) {
-            const boardEl = document.getElementById("board");
-            const pos = document.getElementById("boardPos");
-            pos.textContent = `Row: ${row}, Col: ${col}`;
-
-            if (!gameId) return;
-            const res = await api(`/api/games/${gameId}/move`, {
-                method: "POST",
-                body: JSON.stringify({ row, col }),
-            });
-
-            if (res.ok) {
-                if (res.data?.status && res.data.status !== "active") {
-                    endGameUi("Game finished. Start a new game.");
-                    return;
-                }
-                if (res.data?.message) {
-                    const out = document.getElementById("gameOut");
-                    out.textContent = res.data.message;
-                }
-                setGameMeta(res.data);
-                renderBoard(boardEl, res.data?.board || []);
-            } else {
-                // Keep showing the last board, but still show the click coords.
-                if (res.data?.board) renderBoard(boardEl, res.data.board);
-            }
-        }
-
-        async function resignGame() {
-            if (!gameId) return;
-            const res = await api(`/api/games/${gameId}/resign`, { method: "POST", body: "{}" });
-            if (res.ok) {
-                endGameUi(`Resigned. Winner: ${res.data?.winner || "opponent"}.`);
-            }
-        }
-
-        async function offerDraw() {
-            if (!gameId) return;
-            const res = await api(`/api/games/${gameId}/offer-draw`, { method: "POST", body: "{}" });
-            if (res.ok) {
-                const out = document.getElementById("gameOut");
-                out.textContent = "Draw offered.";
-                await refreshBoard(document.getElementById("board"));
-            }
-        }
-
-        async function acceptDraw() {
-            if (!gameId) return;
-            const res = await api(`/api/games/${gameId}/accept-draw`, { method: "POST", body: "{}" });
-            if (res.ok) {
-                endGameUi("Draw accepted. Game ended.");
-            }
-        }
-
-        function renderBoard(boardEl, board) {
-            const size = board.length || 8;
-            boardEl.innerHTML = "";
-            for (let r = 0; r < size; r++) {
-                for (let c = 0; c < size; c++) {
-                    const cell = document.createElement("button");
-                    cell.type = "button";
-                    cell.dataset.row = String(r);
-                    cell.dataset.col = String(c);
-                    cell.className =
-                        "w-10 h-10 sm:w-11 sm:h-11 bg-emerald-600 rounded-sm flex items-center justify-center " +
-                        "hover:bg-emerald-500 transition";
-                    const v = board[r]?.[c] ?? 0;
-                    if (v !== 0) {
-                        const disc = document.createElement("div");
-                        disc.className =
-                            "w-7 h-7 sm:w-8 sm:h-8 rounded-full " +
-                            (v === 1 ? "bg-black" : "bg-white") +
-                            " shadow";
-                        cell.appendChild(disc);
-                    }
-
-                    cell.addEventListener("click", () => {
-                        makeMove(r, c);
-                    });
-
-                    boardEl.appendChild(cell);
-                }
-            }
-        }
-
-        // On load, show login status
-        refreshMe();
-        (async () => {
-            const gameParam = new URLSearchParams(window.location.search).get("game");
-            if (gameParam) {
-                gameId = Number(gameParam);
-            } else {
-                const res = await api("/api/games/active", { method: "GET" });
-                if (res.ok) gameId = res.data?.game_id || null;
-            }
-
-            if (gameId) {
-                const wrap = document.getElementById("boardWrap");
-                const boardEl = document.getElementById("board");
-                wrap.classList.remove("hidden");
-                refreshBoard(boardEl);
-                startPolling();
-            }
-        })();
+      })();
     </script>
-</div>
-
-    <script>
-        async function send() {
-            const text = document.getElementById("txt").value;
-
-            const r = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text })
-            });
-
-            const data = await r.json();
-            document.getElementById("out").innerText =
-            JSON.stringify(data, null, 2);
-        }
-
-        function parseNumbers(s) {
-            // supports "1 2 3", "1,2,3", "1, 2, 3"
-            return s
-            .trim()
-            .split(/[\s,]+/)
-            .filter(Boolean)
-            .map(Number);
-        }
-    </script>
-
   </body>
 </html>
